@@ -25,8 +25,11 @@ async def assess(attempt: int = Form(1), audio: UploadFile = File(...)):
     if not SPEECH_KEY or not SPEECH_REGION:
         raise HTTPException(500, "AZURE_SPEECH_KEY / AZURE_SPEECH_REGION 환경 변수가 설정되지 않았습니다.")
 
+    wav_bytes = await audio.read()
+    import logging
+    logging.getLogger("proncoach").info(f"받은 녹음: {len(wav_bytes)} bytes, 약 {max(len(wav_bytes)-44, 0)/32000:.1f}초")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        tmp.write(await audio.read())
+        tmp.write(wav_bytes)
         wav_path = tmp.name
 
     try:
@@ -38,8 +41,15 @@ async def assess(attempt: int = Form(1), audio: UploadFile = File(...)):
         recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
         stt_result = recognizer.recognize_once()
 
+        # --- 디버깅: 실패 이유를 로그에 남김 ---
+        import logging
+        logger = logging.getLogger("proncoach")
+        logger.info(f"STT 결과: reason={stt_result.reason}")
+        if stt_result.cancellation_details is not None:
+            logger.info(f"STT 취소 상세: {stt_result.cancellation_details.reason} / {stt_result.cancellation_details.error_details}")
+
         if stt_result.reason != speechsdk.ResultReason.RecognizedSpeech:
-            raise HTTPException(400, "음성을 인식하지 못했습니다. 조금 더 크게, 또렷하게 말해주세요.")
+            raise HTTPException(400, f"음성을 인식하지 못했습니다 (이유: {stt_result.reason}). 녹음이 1초 이상인지, 충분히 크게 말했는지 확인해주세요.")
 
         stt_json = json.loads(stt_result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult))
         recognized = stt_json["NBest"][0].get("DisplayText", "")
