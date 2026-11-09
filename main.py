@@ -26,8 +26,7 @@ async def assess(attempt: int = Form(1), audio: UploadFile = File(...)):
         raise HTTPException(500, "AZURE_SPEECH_KEY / AZURE_SPEECH_REGION 환경 변수가 설정되지 않았습니다.")
 
     wav_bytes = await audio.read()
-    import logging
-    logging.getLogger("proncoach").info(f"받은 녹음: {len(wav_bytes)} bytes, 약 {max(len(wav_bytes)-44, 0)/32000:.1f}초")
+    print(f"[진단] 받은 녹음: {len(wav_bytes)} bytes, 약 {max(len(wav_bytes)-44, 0)/32000:.1f}초", flush=True)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(wav_bytes)
         wav_path = tmp.name
@@ -42,11 +41,9 @@ async def assess(attempt: int = Form(1), audio: UploadFile = File(...)):
         stt_result = recognizer.recognize_once()
 
         # --- 디버깅: 실패 이유를 로그에 남김 ---
-        import logging
-        logger = logging.getLogger("proncoach")
-        logger.info(f"STT 결과: reason={stt_result.reason}")
+        print(f"[진단] STT 결과: reason={stt_result.reason}", flush=True)
         if stt_result.cancellation_details is not None:
-            logger.info(f"STT 취소 상세: {stt_result.cancellation_details.reason} / {stt_result.cancellation_details.error_details}")
+            print(f"[진단] STT 취소 상세: {stt_result.cancellation_details.reason} / {stt_result.cancellation_details.error_details}", flush=True)
 
         if stt_result.reason != speechsdk.ResultReason.RecognizedSpeech:
             raise HTTPException(400, f"음성을 인식하지 못했습니다 (이유: {stt_result.reason}). 녹음이 1초 이상인지, 충분히 크게 말했는지 확인해주세요.")
